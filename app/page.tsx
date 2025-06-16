@@ -28,9 +28,40 @@ import {
   Gift,
   ChevronDown,
   ChevronUp,
+  Eye,
+  Target,
+  Calendar,
 } from "lucide-react"
 import { LogoutButton } from "./logout"
 import SimpleCreditPurchase from "@/components/simple-credit-purchase"
+
+const API_URL = "http://localhost:5000"
+
+interface CreditStats {
+  email_validation: number
+  phone_number_validation: number
+  linkedin_finder: number
+  contact_finder: number
+  company_finder: number
+  company_people_finder: number
+  enrichment: number
+}
+
+interface DashboardData {
+  credits: CreditStats
+  has_claimed_free: boolean
+  usage_stats?: {
+    total_searches_this_month: number
+    total_validations_this_month: number
+    success_rate: number
+    active_tools: number
+  }
+  recent_activity?: Array<{
+    action: string
+    time: string
+    type: string
+  }>
+}
 
 // Create a separate component that uses useSearchParams
 function HomePageContent() {
@@ -40,6 +71,8 @@ function HomePageContent() {
   const [successData, setSuccessData] = useState<any>(null)
   const [claimingFree, setClaimingFree] = useState(false)
   const [showCreditPurchase, setShowCreditPurchase] = useState(false)
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [loadingData, setLoadingData] = useState(true)
   const { user, isAuthenticated, isLoading, loginWithRedirect } = useAuth0()
   const searchParams = useSearchParams()
 
@@ -51,6 +84,13 @@ function HomePageContent() {
     }, 100)
     return () => clearTimeout(timer)
   }, [])
+
+  // Fetch dashboard data
+  useEffect(() => {
+    if (mounted && isAuthenticated && user?.email) {
+      fetchDashboardData()
+    }
+  }, [mounted, isAuthenticated, user?.email])
 
   // Handle payment success
   useEffect(() => {
@@ -70,6 +110,11 @@ function HomePageContent() {
         })
         setShowSuccessMessage(true)
 
+        // Refresh dashboard data after successful payment
+        setTimeout(() => {
+          fetchDashboardData()
+        }, 1000)
+
         // Clean up URL after 1 second
         setTimeout(() => {
           window.history.replaceState({}, "", "/")
@@ -78,12 +123,77 @@ function HomePageContent() {
     }
   }, [mounted, searchParams])
 
-  // Auto-redirect to Auth0 login if not authenticated
-  useEffect(() => {
-    if (mounted && !isLoading && !isAuthenticated) {
-      loginWithRedirect()
+  const fetchDashboardData = async () => {
+    if (!user?.email) return
+
+    try {
+      setLoadingData(true)
+      const response = await fetch(`${API_URL}/validation_count?email=${encodeURIComponent(user.email)}`)
+
+      if (response.ok) {
+        const data = await response.json()
+
+        // Map the API response to our dashboard data structure
+        const mappedData: DashboardData = {
+          credits: {
+            email_validation: data.available_credits?.email_validation || 0,
+            phone_number_validation: data.available_credits?.phone_number_validation || 0,
+            linkedin_finder: data.available_credits?.linkedin_finder || 0,
+            contact_finder: data.available_credits?.contact_finder || 0,
+            company_finder: data.available_credits?.company_finder || 0,
+            company_people_finder: data.available_credits?.company_people_finder || 0,
+            enrichment: data.available_credits?.enrichment || 0,
+          },
+          // Check if user has claimed free credits by looking at total credits
+          has_claimed_free: Object.values(data.total_credits || {}).some((credit) => credit > 0),
+          usage_stats: {
+            total_searches_this_month:
+              (data.usage_summary?.contact_finder_used || 0) + (data.usage_summary?.linkedin_finder_used || 0),
+            total_validations_this_month:
+              (data.usage_summary?.email_validation_used || 0) + (data.usage_summary?.phone_validation_used || 0),
+            success_rate: 94.8, // You can calculate this from your data if available
+            active_tools: Object.values(data.available_credits || {}).filter((credit) => credit > 0).length,
+          },
+          recent_activity: [
+            {
+              action: `Contact Finder: ${data.usage_summary?.contact_finder_used || 0} searches used`,
+              time: "Today",
+              type: "search",
+            },
+            {
+              action: `Email Validation: ${data.usage_summary?.email_validation_used || 0} validations used`,
+              time: "Today",
+              type: "validation",
+            },
+            {
+              action: `Company Finder: ${data.usage_summary?.company_finder_used || 0} searches used`,
+              time: "Today",
+              type: "analysis",
+            },
+            {
+              action: `Phone Validation: ${data.usage_summary?.phone_validation_used || 0} validations used`,
+              time: "Today",
+              type: "validation",
+            },
+            {
+              action: `Company People Finder: ${data.usage_summary?.company_people_finder_used || 0} searches used`,
+              time: "Today",
+              type: "search",
+            },
+          ],
+        }
+
+        setDashboardData(mappedData)
+        console.log("📊 Dashboard data loaded:", mappedData)
+      } else {
+        console.error("Failed to fetch dashboard data")
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error)
+    } finally {
+      setLoadingData(false)
     }
-  }, [mounted, isLoading, isAuthenticated, loginWithRedirect])
+  }
 
   const closeSuccessMessage = () => {
     setShowSuccessMessage(false)
@@ -91,19 +201,38 @@ function HomePageContent() {
   }
 
   const claimFreeCredits = async () => {
+    if (!user?.email) return
+
     setClaimingFree(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setClaimingFree(false)
-      setSuccessData({
-        credits: "100",
-        email: user?.email,
-        packageName: "Free Starter",
-        price: "0",
+    try {
+      const response = await fetch(`${API_URL}/claim-free-credits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email }),
       })
-      setShowSuccessMessage(true)
-    }, 1500)
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setSuccessData({
+          credits: data.total_credits.toString(),
+          email: user.email,
+          packageName: "Free Starter Pack",
+          price: "0",
+        })
+        setShowSuccessMessage(true)
+
+        // Refresh dashboard data
+        await fetchDashboardData()
+      } else {
+        console.error("Failed to claim free credits:", data.error)
+      }
+    } catch (error) {
+      console.error("Error claiming free credits:", error)
+    } finally {
+      setClaimingFree(false)
+    }
   }
 
   const toggleCreditPurchase = () => {
@@ -114,16 +243,63 @@ function HomePageContent() {
     return null
   }
 
-  // Show loading state while auth is loading OR while redirecting to login
-  if (isLoading || !isAuthenticated) {
+  // Show loading state while auth is loading
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-purple-600" />
-          <p className="text-gray-600 text-lg">{isLoading ? "Loading..." : "Redirecting to login..."}</p>
+          <p className="text-gray-600 text-lg">Loading...</p>
         </div>
       </div>
     )
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <User className="h-8 w-8 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Welcome to Contact Intelligence</h1>
+          <p className="text-gray-600 mb-6">Please log in to access your dashboard and tools.</p>
+          <button
+            onClick={() => loginWithRedirect()}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+          >
+            Log In to Continue
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Calculate real statistics from dashboard data
+  const getTotalSearches = () => {
+    if (!dashboardData?.credits) return 0
+    return (dashboardData.credits.linkedin_finder || 0) + (dashboardData.credits.contact_finder || 0)
+  }
+
+  const getTotalValidations = () => {
+    if (!dashboardData?.credits) return 0
+    return (dashboardData.credits.email_validation || 0) + (dashboardData.credits.phone_number_validation || 0)
+  }
+
+  const getActiveTools = () => {
+    if (!dashboardData?.credits) return 0
+    const credits = dashboardData.credits
+    const toolsWithCredits = [
+      credits.contact_finder,
+      credits.company_finder,
+      credits.linkedin_finder,
+      credits.email_validation,
+      credits.phone_number_validation,
+      credits.enrichment,
+      credits.company_people_finder,
+    ]
+    return toolsWithCredits.filter((credit) => (credit || 0) > 0).length
   }
 
   const tools = [
@@ -133,7 +309,7 @@ function HomePageContent() {
       icon: User,
       href: "/contact-finder",
       color: "blue",
-      stats: "10K+ contacts found",
+      stats: `${dashboardData?.credits?.contact_finder || 0} credits`,
     },
     {
       name: "Company Finder",
@@ -141,39 +317,15 @@ function HomePageContent() {
       icon: Building,
       href: "/company-finder",
       color: "purple",
-      stats: "5K+ companies analyzed",
+      stats: `${dashboardData?.credits?.company_finder || 0} credits`,
     },
     {
-      name: "File Upload",
-      description: "Upload data files and configure field mapping",
-      icon: Upload,
-      href: "/file-upload",
-      color: "teal",
-      stats: "Custom upload mapping",
-    },
-    {
-      name: "Contact Dashboard",
-      description: "View, edit and manage enriched contact records",
-      icon: User,
-      href: "/contact-dashboard",
-      color: "cyan",
-      stats: "Contacts overview",
-    },
-    {
-      name: "Company Dashboard",
-      description: "Manage and enrich company records",
-      icon: Building,
-      href: "/company-dashboard",
-      color: "orange",
-      stats: "Companies managed",
-    },
-    {
-      name: "Upload Contact",
-      description: "Bulk upload and validate contact information from CSV files",
-      icon: Upload,
-      href: "/upload-contact",
-      color: "indigo",
-      stats: "Batch processing",
+      name: "LinkedIn Finder",
+      description: "Find contacts through LinkedIn profile analysis",
+      icon: Search,
+      href: "/linkedin-finder",
+      color: "blue",
+      stats: `${dashboardData?.credits?.linkedin_finder || 0} credits`,
     },
     {
       name: "Email Validator",
@@ -181,15 +333,7 @@ function HomePageContent() {
       icon: Mail,
       href: "/email-validator",
       color: "pink",
-      stats: "25K+ emails validated",
-    },
-    {
-      name: "Email Finder",
-      description: "Advanced email validation with confidence scoring and deliverability analysis",
-      icon: Search,
-      href: "/email-finder",
-      color: "purple",
-      stats: "Advanced validation",
+      stats: `${dashboardData?.credits?.email_validation || 0} credits`,
     },
     {
       name: "Phone Validator",
@@ -197,7 +341,39 @@ function HomePageContent() {
       icon: Phone,
       href: "/phone-validator",
       color: "amber",
-      stats: "Global coverage",
+      stats: `${dashboardData?.credits?.phone_number_validation || 0} credits`,
+    },
+    {
+      name: "Profile Enrichment",
+      description: "Enrich contact profiles with additional data",
+      icon: Eye,
+      href: "/enrichment",
+      color: "green",
+      stats: `${dashboardData?.credits?.enrichment || 0} credits`,
+    },
+    {
+      name: "Company People Finder",
+      description: "Find people within specific companies",
+      icon: Target,
+      href: "/company-people-finder",
+      color: "violet",
+      stats: `${dashboardData?.credits?.company_people_finder || 0} credits`,
+    },
+    {
+      name: "File Upload",
+      description: "Upload data files and configure field mapping",
+      icon: Upload,
+      href: "/upload-contact",
+      color: "teal",
+      stats: "Bulk processing",
+    },
+    {
+      name: "Contact Dashboard",
+      description: "View, edit and manage enriched contact records",
+      icon: User,
+      href: "/contact-dashboard",
+      color: "cyan",
+      stats: "Manage contacts",
     },
     {
       name: "Reports & Analytics",
@@ -205,36 +381,65 @@ function HomePageContent() {
       icon: BarChart3,
       href: "/reports",
       color: "emerald",
-      stats: "Real-time analytics",
+      stats: "Real-time insights",
     },
   ]
 
   const quickStats = [
-    { label: "Total Searches", value: "1,247", change: "+12%", icon: Search },
-    { label: "Success Rate", value: "94.8%", change: "+2.1%", icon: CheckCircle },
-    { label: "This Month", value: "342", change: "+18%", icon: TrendingUp },
-    { label: "Active Tools", value: "7", change: "+1", icon: Shield },
+    {
+      label: "Search Credits",
+      value: loadingData ? "..." : getTotalSearches().toLocaleString(),
+      change: "available",
+      icon: Search,
+      description: "LinkedIn + Contact Finder credits",
+    },
+    {
+      label: "Validation Credits",
+      value: loadingData ? "..." : getTotalValidations().toLocaleString(),
+      change: "available",
+      icon: CheckCircle,
+      description: "Email + Phone validation credits",
+    },
+    {
+      label: "Total Used",
+      value: loadingData
+        ? "..."
+        : (
+            (dashboardData?.usage_stats?.total_searches_this_month || 0) +
+            (dashboardData?.usage_stats?.total_validations_this_month || 0)
+          ).toString(),
+      change: "this period",
+      icon: TrendingUp,
+      description: "Total searches and validations used",
+    },
+    {
+      label: "Active Tools",
+      value: loadingData ? "..." : getActiveTools().toString(),
+      change: "ready",
+      icon: Shield,
+      description: "Tools with available credits",
+    },
   ]
 
-  const recentActivity = [
-    { action: "Contact search completed", time: "2 minutes ago" },
-    { action: "Company analysis finished", time: "15 minutes ago" },
-    { action: "Email validation batch processed", time: "1 hour ago" },
-    { action: "Phone validation completed", time: "2 hours ago" },
-    { action: "Profile enrichment completed", time: "3 hours ago" },
+  const recentActivity = dashboardData?.recent_activity || [
+    { action: "Contact search completed", time: "2 minutes ago", type: "search" },
+    { action: "Company analysis finished", time: "15 minutes ago", type: "analysis" },
+    { action: "Email validation batch processed", time: "1 hour ago", type: "validation" },
+    { action: "Phone validation completed", time: "2 hours ago", type: "validation" },
+    { action: "Profile enrichment completed", time: "3 hours ago", type: "enrichment" },
   ]
 
   const quickActions = [
     { name: "Find New Contact", href: "/contact-finder", icon: User, color: "blue" },
     { name: "Analyze Company", href: "/company-finder", icon: Building, color: "purple" },
-    { name: "Bulk Upload", href: "/upload-contact", icon: Upload, color: "indigo" },
+    { name: "LinkedIn Search", href: "/linkedin-finder", icon: Search, color: "blue" },
     { name: "Validate Email", href: "/email-validator", icon: Mail, color: "pink" },
-    { name: "Find Email", href: "/email-finder", icon: Search, color: "purple" },
+    { name: "Enrich Profile", href: "/enrichment", icon: Eye, color: "green" },
     { name: "Buy Credits", href: "#credits", icon: CreditCard, color: "green" },
   ]
 
   return (
-    <div className="min-h-screen bg-white py-12 px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-12 px-4 relative overflow-hidden">
       {/* Success Message Overlay */}
       {showSuccessMessage && successData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -255,18 +460,12 @@ function HomePageContent() {
             </h3>
 
             <div className="bg-green-50 rounded-xl p-4 mb-6">
-              <p className="text-lg font-semibold text-green-800 mb-1">{successData.packageName} Package</p>
+              <p className="text-lg font-semibold text-green-800 mb-1">{successData.packageName}</p>
               <p className="text-green-700">
                 {successData.credits} credits {successData.price !== "0" && `for $${successData.price}`}
               </p>
               <p className="text-sm text-green-600 mt-2">Credits have been added to your account</p>
             </div>
-
-            <p className="text-gray-600 mb-6">
-              {successData.price === "0"
-                ? "Your free credits are now available across all tools."
-                : "Thank you for your purchase! Your credits are now available across all tools."}
-            </p>
 
             <button
               onClick={closeSuccessMessage}
@@ -285,63 +484,76 @@ function HomePageContent() {
         <div className="absolute bottom-0 left-1/3 w-96 h-96 bg-pink-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
       </div>
 
-      <div className="max-w-5xl mx-auto space-y-8 relative z-10">
-        {/* Simple Welcome Header */}
-        <div className="flex justify-between items-center">
+      <div className="max-w-6xl mx-auto space-y-8 relative z-10">
+        {/* Enhanced Welcome Header */}
+        <div className="flex justify-between items-center bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-white/20 p-6">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
               {user.picture ? (
                 <img
                   src={user.picture || "/placeholder.svg"}
                   alt={user.name || "User"}
-                  className="w-12 h-12 rounded-full object-cover"
+                  className="w-16 h-16 rounded-full object-cover"
                 />
               ) : (
-                <User className="h-6 w-6 text-white" />
+                <User className="h-8 w-8 text-white" />
               )}
             </div>
             <div>
-              <h2 className="text-gray-900 font-semibold text-xl">Welcome back, {user.name || user.email}</h2>
-              <p className="text-gray-600 text-sm">{user.email}</p>
+              <h2 className="text-gray-900 font-bold text-2xl">
+                Welcome back, {user.name || user.email?.split("@")[0]}
+              </h2>
+              <p className="text-gray-600">{user.email}</p>
+              <div className="flex items-center mt-1 text-sm text-gray-500">
+                <Calendar className="h-4 w-4 mr-1" />
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </div>
             </div>
           </div>
           <LogoutButton />
         </div>
 
-        {/* Claim Free Credits Section - NEW */}
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl shadow-lg border border-emerald-200 p-6 transition-all duration-300 hover:shadow-xl">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center mb-4 md:mb-0">
-              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mr-4 shadow-inner">
-                <Gift className="h-6 w-6 text-emerald-600" />
+        {/* Claim Free Credits Section - Only show if not claimed */}
+        {!loadingData && !dashboardData?.has_claimed_free && (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl shadow-lg border border-emerald-200 p-6 transition-all duration-300 hover:shadow-xl">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center mb-4 md:mb-0">
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mr-4 shadow-inner">
+                  <Gift className="h-6 w-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Get Started Free</h3>
+                  <p className="text-sm text-gray-600">Claim 575+ credits across all tools to try our services</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Get Started Free</h3>
-                <p className="text-sm text-gray-600">Claim 100 credits of each type to try our services</p>
-              </div>
+              <button
+                onClick={claimFreeCredits}
+                disabled={claimingFree}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-md disabled:opacity-50"
+              >
+                {claimingFree ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
+                    Claiming...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2 inline" />
+                    Claim Free Credits
+                  </>
+                )}
+              </button>
             </div>
-            <button
-              onClick={claimFreeCredits}
-              disabled={claimingFree}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-md"
-            >
-              {claimingFree ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
-                  Claiming...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2 inline" />
-                  Claim Free Credits
-                </>
-              )}
-            </button>
           </div>
-        </div>
+        )}
 
         {/* Hero Section */}
-        <div className="text-center relative mt-8">
+        <div className="text-center relative">
           <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-purple-600 to-blue-600 rounded-3xl shadow-xl mb-6 relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative z-10 transform group-hover:scale-110 transition-transform duration-500">
@@ -350,14 +562,14 @@ function HomePageContent() {
           </div>
 
           <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 text-transparent bg-clip-text">
-            Contact Intelligence
+            Contact Intelligence Dashboard
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Access your professional contact tools and view real-time insights
+            Your comprehensive platform for contact discovery, validation, and enrichment
           </p>
         </div>
 
-        {/* Quick Stats */}
+        {/* Enhanced Quick Stats */}
         <div
           className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 transition-all duration-1000 transform ${
             animationComplete ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
@@ -368,23 +580,20 @@ function HomePageContent() {
             return (
               <div
                 key={stat.label}
-                className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group"
+                className="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-white/20 p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group"
                 style={{ transitionDelay: `${index * 100}ms` }}
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="bg-gradient-to-br from-purple-500 to-blue-600 p-3 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <Icon className="h-6 w-6 text-white" />
                   </div>
-                  <div
-                    className={`text-sm font-medium px-3 py-1 rounded-full ${
-                      stat.change.startsWith("+") ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
+                  <div className="text-sm font-medium px-3 py-1 rounded-full bg-blue-100 text-blue-700">
                     {stat.change}
                   </div>
                 </div>
                 <p className="text-gray-600 text-sm mb-1">{stat.label}</p>
-                <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</p>
+                <p className="text-xs text-gray-500">{stat.description}</p>
               </div>
             )
           })}
@@ -398,34 +607,48 @@ function HomePageContent() {
           style={{ transitionDelay: "200ms" }}
         >
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Zap className="h-6 w-6 mr-2 text-yellow-500" />
-              Premium Tools
+            <h2 className="text-3xl font-bold text-gray-900 flex items-center">
+              <Zap className="h-8 w-8 mr-3 text-yellow-500" />
+              Your Tools & Credits
             </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tools.map((tool, index) => {
               const Icon = tool.icon
+              const hasCredits = tool.stats.includes("credits") && !tool.stats.startsWith("0 credits")
+
               return (
                 <Link
                   key={tool.name}
                   href={tool.href}
-                  className="group relative bg-white rounded-2xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
-                  style={{ transitionDelay: `${300 + index * 100}ms` }}
+                  className={`group relative bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-white/20 p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden ${
+                    hasCredits ? "ring-2 ring-green-200" : ""
+                  }`}
+                  style={{ transitionDelay: `${300 + index * 50}ms` }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                   <div className="relative z-10">
                     <div className="flex items-center justify-between mb-4">
-                      <div className="bg-gradient-to-br from-blue-500 to-purple-700 p-3 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <div
+                        className={`p-3 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300 ${
+                          hasCredits
+                            ? "bg-gradient-to-br from-green-500 to-emerald-600"
+                            : "bg-gradient-to-br from-gray-400 to-gray-600"
+                        }`}
+                      >
                         <Icon className="h-6 w-6 text-white" />
                       </div>
                       <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-all duration-300" />
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">{tool.name}</h3>
                     <p className="text-gray-600 text-sm mb-3">{tool.description}</p>
-                    <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full inline-block">
+                    <div
+                      className={`text-xs font-medium px-3 py-1 rounded-full inline-block ${
+                        hasCredits ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
                       {tool.stats}
                     </div>
                   </div>
@@ -435,7 +658,7 @@ function HomePageContent() {
           </div>
         </div>
 
-        {/* Credit Purchase Section - COLLAPSED */}
+        {/* Credit Purchase Section */}
         <div
           id="credits"
           className={`transition-all duration-1000 transform ${
@@ -444,17 +667,17 @@ function HomePageContent() {
           style={{ transitionDelay: "300ms" }}
         >
           <div
-            className="flex items-center justify-between mb-4 bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:bg-gray-50"
+            className="flex items-center justify-between mb-4 bg-white/80 backdrop-blur rounded-xl shadow-lg border border-white/20 p-6 cursor-pointer hover:bg-white/90 transition-all duration-300"
             onClick={toggleCreditPurchase}
           >
             <div className="flex items-center">
-              <CreditCard className="h-6 w-6 mr-2 text-green-500" />
-              <h2 className="text-xl font-bold text-gray-900">Purchase Credits</h2>
+              <CreditCard className="h-6 w-6 mr-3 text-green-500" />
+              <h2 className="text-2xl font-bold text-gray-900">Purchase Additional Credits</h2>
             </div>
             {showCreditPurchase ? (
-              <ChevronUp className="h-5 w-5 text-gray-500" />
+              <ChevronUp className="h-6 w-6 text-gray-500" />
             ) : (
-              <ChevronDown className="h-5 w-5 text-gray-500" />
+              <ChevronDown className="h-6 w-6 text-gray-500" />
             )}
           </div>
 
@@ -473,7 +696,7 @@ function HomePageContent() {
           style={{ transitionDelay: "400ms" }}
         >
           {/* Recent Activity */}
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+          <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-white/20 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <Clock className="h-5 w-5 mr-2 text-blue-500" />
               Recent Activity
@@ -482,7 +705,7 @@ function HomePageContent() {
               {recentActivity.map((activity, index) => (
                 <div
                   key={index}
-                  className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                  className="flex items-center space-x-3 p-3 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors"
                 >
                   <div className="bg-blue-100 p-2 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-blue-600" />
@@ -506,7 +729,7 @@ function HomePageContent() {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+          <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-white/20 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <Activity className="h-5 w-5 mr-2 text-purple-500" />
               Quick Actions
@@ -518,22 +741,20 @@ function HomePageContent() {
 
                 if (isCreditsAction) {
                   return (
-                    <a
+                    <button
                       key={action.name}
-                      href={action.href}
-                      onClick={(e) => {
-                        e.preventDefault()
+                      onClick={() => {
                         setShowCreditPurchase(true)
                         document.getElementById("credits")?.scrollIntoView({ behavior: "smooth" })
                       }}
-                      className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
+                      className="w-full flex items-center space-x-3 p-4 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors group"
                     >
                       <div className="bg-green-100 p-2 rounded-lg group-hover:scale-110 transition-transform duration-300">
                         <Icon className="h-5 w-5 text-green-600" />
                       </div>
                       <span className="font-medium text-gray-900">{action.name}</span>
                       <ArrowRight className="h-4 w-4 text-gray-400 ml-auto group-hover:text-gray-600 group-hover:translate-x-1 transition-all duration-300" />
-                    </a>
+                    </button>
                   )
                 }
 
@@ -541,7 +762,7 @@ function HomePageContent() {
                   <Link
                     key={action.name}
                     href={action.href}
-                    className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
+                    className="flex items-center space-x-3 p-4 bg-gray-50/80 rounded-xl hover:bg-gray-100/80 transition-colors group"
                   >
                     <div className="bg-blue-100 p-2 rounded-lg group-hover:scale-110 transition-transform duration-300">
                       <Icon className="h-5 w-5 text-blue-600" />
