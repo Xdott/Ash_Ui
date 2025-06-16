@@ -35,7 +35,7 @@ import {
 import { LogoutButton } from "./logout"
 import SimpleCreditPurchase from "@/components/simple-credit-purchase"
 
-const API_URL = "http://localhost:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
 interface CreditStats {
   email_validation: number
