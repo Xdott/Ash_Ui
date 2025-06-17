@@ -50,6 +50,7 @@ interface PersonResult {
   enrichment_data?: any
   has_enrichment?: boolean
   enrichment_loading?: boolean
+  added_to_contacts?: boolean
 }
 
 interface SearchResponse {
@@ -457,6 +458,77 @@ export default function CompanyPeopleFinder() {
     })
   }
 
+  const addToContact = async (person: PersonResult, personIndex: number) => {
+    if (!user?.email || !person.email) {
+      toast({
+        title: "Cannot Add Contact",
+        description: "Email address is required to add contact.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/add-contact`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_email: user.email,
+          first_name: person.person_name.split(" ")[0] || "",
+          last_name: person.person_name.split(" ").slice(1).join(" ") || "",
+          full_name: person.person_name,
+          email: person.email,
+          company: person.company_name,
+          job_title: person.title,
+          linkedin_url: person.linkedin_url || "",
+          website: person.company_domain ? `https://${person.company_domain}` : "",
+          lead_source: "Company People Finder",
+          source: "people_finder",
+          notes: `Found via Company People Finder. Match Score: ${person.match_score}. ${person.snippet}`,
+          custom_field_1: person.email_confidence ? `Email Confidence: ${person.email_confidence}%` : "",
+          custom_field_2: person.validation_score ? `Validation Score: ${person.validation_score}%` : "",
+          custom_field_3: person.email_source || "",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          toast({
+            title: "Contact Already Exists",
+            description: "A contact with this email already exists in your database.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Failed to Add Contact",
+            description: data.error || "Could not add contact to database.",
+            variant: "destructive",
+          })
+        }
+        return
+      }
+
+      toast({
+        title: "Contact Added Successfully!",
+        description: `${person.person_name} has been added to your contacts database.`,
+      })
+
+      // Optional: Mark this person as added to contacts in the UI
+      setResults((prev) => prev.map((p, index) => (index === personIndex ? { ...p, added_to_contacts: true } : p)))
+    } catch (err) {
+      console.error("Add contact error:", err)
+      toast({
+        title: "Network Error",
+        description: "Failed to add contact due to network error.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isLoading) {
       handleSearch()
@@ -852,6 +924,28 @@ export default function CompanyPeopleFinder() {
                                 </Badge>
                               )}
                             </div>
+
+                            {/* Add to Contact Button - Only show when email exists */}
+                            {!person.added_to_contacts ? (
+                              <Button
+                                onClick={() => addToContact(person, index)}
+                                size="sm"
+                                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
+                              >
+                                <UserCheck className="h-4 w-4 mr-2" />
+                                Add to Contacts
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full border-green-500 text-green-600 cursor-default"
+                                disabled
+                              >
+                                <UserCheck className="h-4 w-4 mr-2" />
+                                Added to Contacts ✓
+                              </Button>
+                            )}
                           </div>
                         ) : person.linkedin_url ? (
                           <Button

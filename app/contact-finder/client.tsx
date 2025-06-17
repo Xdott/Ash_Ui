@@ -37,6 +37,10 @@ function ContactResult({
   activeTab,
   setActiveTab,
 }: ContactResultProps) {
+  const { user } = useAuth0()
+  const [addedToContacts, setAddedToContacts] = useState(false)
+  const [addingToContacts, setAddingToContacts] = useState(false)
+
   if (loading) {
     return (
       <div className="bg-blue-50 backdrop-blur shadow-xl rounded-xl border-0">
@@ -87,52 +91,93 @@ function ContactResult({
     )
   }
 
-  // FIXED: Enhanced skills processing function
+  // Helper function to process skills data
   const processSkills = (skills: any) => {
-    console.log("🔍 Processing skills data:", skills, "Type:", typeof skills)
-    
-    if (!skills) {
-      console.log("❌ No skills data provided")
-      return []
-    }
+    if (!skills) return []
 
-    // Handle array of skills
+    // Handle different skill data formats
     if (Array.isArray(skills)) {
-      console.log("✅ Skills is array with length:", skills.length)
       return skills
         .map((skill) => {
-          if (typeof skill === "string") return skill.trim()
-          if (typeof skill === "object" && skill?.name) return skill.name.trim()
-          if (typeof skill === "object" && skill?.skill) return skill.skill.trim()
-          if (typeof skill === "object" && skill?.title) return skill.title.trim()
-          return String(skill).trim()
+          if (typeof skill === "string") return skill
+          if (typeof skill === "object" && skill.name) return skill.name
+          if (typeof skill === "object" && skill.skill) return skill.skill
+          return String(skill)
         })
         .filter(Boolean)
-        .slice(0, 50) // Limit to 50 skills for display
     }
 
     // Handle comma-separated string
     if (typeof skills === "string") {
-      console.log("✅ Skills is string:", skills.substring(0, 100))
       return skills
-        .split(/[,;|]/) // Split on comma, semicolon, or pipe
+        .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
-        .slice(0, 50)
     }
 
-    // Handle object with skills property
-    if (typeof skills === "object" && skills.skills) {
-      console.log("✅ Skills has nested skills property")
-      return processSkills(skills.skills)
-    }
-
-    console.log("❌ Unknown skills format")
     return []
   }
 
   const skillsList = processSkills(enrichedData?.skills)
-  console.log("🎯 Final skills list:", skillsList)
+
+  const addToContact = async () => {
+    if (!user?.email || !result?.predicted_email) return
+
+    setAddingToContacts(true)
+
+    try {
+      const contactData = {
+        user_email: user.email,
+        first_name: employeeName.split(" ")[0] || "",
+        last_name: employeeName.split(" ").slice(1).join(" ") || "",
+        full_name: enrichedData?.full_name || employeeName || "",
+        email: result.predicted_email,
+        company: result.domain || "",
+        job_title: enrichedData?.headline || result.person_info?.title || "",
+        linkedin_url:
+          enrichedData?.linkedin_url ||
+          result.person_info?.linkedin_profile ||
+          result.person_info?.LinkedIn_Profile ||
+          "",
+        website: result.domain ? `https://${result.domain}` : "",
+        lead_source: "Contact Finder",
+        source: "contact_finder",
+        notes: `Found via Contact Finder. ${result.confidence ? `Confidence: ${result.confidence}%` : ""} ${enrichedData?.summary ? `Summary: ${enrichedData.summary.substring(0, 200)}...` : ""}`,
+        custom_field_1: result.confidence ? `${result.confidence}% confidence` : "",
+        custom_field_2: enrichedData?.city
+          ? `${enrichedData.city}${enrichedData.state ? `, ${enrichedData.state}` : ""}`
+          : "",
+        custom_field_3: enrichedData?.follower_count ? `${enrichedData.follower_count} LinkedIn followers` : "",
+      }
+
+      const response = await fetch(`${API_URL}/add-contact`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(contactData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          alert("This contact already exists in your database.")
+        } else {
+          throw new Error(data.error || "Failed to add contact")
+        }
+        return
+      }
+
+      setAddedToContacts(true)
+      alert(`✅ Contact added successfully! Contact ID: ${data.contact_id}`)
+    } catch (error: any) {
+      console.error("Add contact error:", error)
+      alert(`❌ Failed to add contact: ${error.message}`)
+    } finally {
+      setAddingToContacts(false)
+    }
+  }
 
   return (
     <div className="bg-white/80 backdrop-blur shadow-xl rounded-xl border-0">
@@ -286,9 +331,37 @@ function ContactResult({
               "Generate AI Summary"
             )}
           </button>
+          {result?.predicted_email && (
+            <button
+              className={`px-6 py-3 border-2 rounded-lg transition-colors font-medium disabled:opacity-50 flex items-center ${
+                addedToContacts
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-orange-200 hover:bg-orange-50 text-orange-700"
+              }`}
+              onClick={addToContact}
+              disabled={addingToContacts || addedToContacts}
+            >
+              {addingToContacts ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding to Contacts...
+                </>
+              ) : addedToContacts ? (
+                <>
+                  <User className="mr-2 h-4 w-4" />
+                  Added to Contacts ✓
+                </>
+              ) : (
+                <>
+                  <User className="mr-2 h-4 w-4" />
+                  Add to Contacts
+                </>
+              )}
+            </button>
+          )}
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation - FIXED: AI Summary tab shows independently */}
         <div className="mt-8">
           <div className="border-b border-gray-200 mb-6">
             <nav className="-mb-px flex space-x-8">
@@ -360,7 +433,7 @@ function ContactResult({
                 </>
               )}
 
-              {/* AI Summary Tab */}
+              {/* AI Summary Tab - FIXED: Shows independently of enriched data */}
               {aiSummary && (
                 <button
                   onClick={() => setActiveTab("ai-summary")}
@@ -378,7 +451,7 @@ function ContactResult({
 
           {/* Tab Content */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            {/* Basic Info Tab */}
+            {/* Basic Info Tab - FIXED: Default tab for basic search results */}
             {activeTab === "basic" && (
               <div className="space-y-6">
                 <div>
@@ -541,7 +614,7 @@ function ContactResult({
               </div>
             )}
 
-            {/* Education Tab */}
+            {/* Education Tab - FIXED: Better data handling */}
             {activeTab === "education" && enrichedData && (
               <div className="space-y-6">
                 <div>
@@ -605,7 +678,7 @@ function ContactResult({
               </div>
             )}
 
-            {/* FIXED: Skills Tab with enhanced processing */}
+            {/* Skills Tab */}
             {activeTab === "skills" && enrichedData && (
               <div className="space-y-6">
                 <div>
@@ -631,15 +704,6 @@ function ContactResult({
                       <Briefcase className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                       <p>No skills data available</p>
                       <p className="text-sm mt-2">Skills will appear here after profile enrichment</p>
-                      {/* DEBUG: Show raw skills data */}
-                      {enrichedData?.skills && (
-                        <div className="mt-4 p-4 bg-gray-100 rounded-lg text-left">
-                          <p className="text-xs text-gray-600 mb-2">Raw skills data (for debugging):</p>
-                          <pre className="text-xs text-gray-800 overflow-auto">
-                            {JSON.stringify(enrichedData.skills, null, 2)}
-                          </pre>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -718,7 +782,7 @@ function ContactResult({
               </div>
             )}
 
-            {/* FIXED: AI Summary Tab with robust JSON parsing */}
+            {/* AI Summary Tab - FIXED: No debug info, works independently */}
             {activeTab === "ai-summary" && aiSummary && (
               <div className="space-y-6">
                 <div>
@@ -803,7 +867,7 @@ export default function ContactFinder() {
   const [generating, setGenerating] = useState(false)
   const [enrichedData, setEnrichedData] = useState<any>(null)
   const [aiSummary, setAiSummary] = useState<string>("")
-  const [activeTab, setActiveTab] = useState("basic")
+  const [activeTab, setActiveTab] = useState("basic") // FIXED: Default to basic tab
 
   const [companySuggestions, setCompanySuggestions] = useState([])
   const [showCompanySuggestions, setShowCompanySuggestions] = useState(false)
@@ -973,7 +1037,7 @@ export default function ContactFinder() {
     setAiSummary("")
     setError(null)
     setResult(null)
-    setActiveTab("basic")
+    setActiveTab("basic") // FIXED: Reset to basic tab
 
     if (!employeeDetails.employeeName.trim() || !employeeDetails.companyName.trim()) {
       setError("Please provide both name and company information.")
@@ -1036,7 +1100,7 @@ export default function ContactFinder() {
     setAiSummary("")
     setError(null)
     setResult(null)
-    setActiveTab("basic")
+    setActiveTab("basic") // FIXED: Reset to basic tab
 
     if (!linkedinUrl.trim()) {
       setError("Please provide a LinkedIn URL.")
@@ -1102,11 +1166,6 @@ export default function ContactFinder() {
       }
 
       const enrichedProfile = await response.json()
-      
-      // FIXED: Add detailed logging for enriched data
-      console.log("🎯 Enriched Profile Response:", enrichedProfile)
-      console.log("🔍 Skills in enriched data:", enrichedProfile?.skills)
-      
       setEnrichedData(enrichedProfile)
 
       // Auto-switch to overview tab to show enriched data
@@ -1119,7 +1178,7 @@ export default function ContactFinder() {
     setEnriching(false)
   }
 
-  // FIXED: Enhanced AI Summary Generation with robust JSON parsing
+  // FIXED: Simplified AI Summary Generation - works independently
   const handleGenerateAISummary = async () => {
     setGenerating(true)
     setError(null)
@@ -1211,8 +1270,6 @@ export default function ContactFinder() {
         },
       }
 
-      console.log("🚀 Sending AI summary payload:", summaryPayload)
-
       const response = await fetch(`${API_URL}/generate_summary`, {
         method: "POST",
         headers: {
@@ -1227,50 +1284,74 @@ export default function ContactFinder() {
       }
 
       const data = await response.json()
-      console.log("🔍 Raw AI response:", data)
 
-      // FIXED: Simplified and more robust parsing for the specific API response format
+      // Parse the AI response - FIXED: Handle malformed JSON with escaped quotes
       let parsedSummary
-      
-      console.log("🔍 Raw API response:", data)
+      try {
+        console.log("🔍 Raw AI response:", data)
 
-      // Check if data.summary exists and is a string (which it should be based on your API)
-      if (data.summary && typeof data.summary === "string") {
-        console.log("✅ Found data.summary string, attempting to parse...")
-        
-        try {
-          // Try to parse as JSON first
-          parsedSummary = JSON.parse(data.summary)
-          console.log("✅ Successfully parsed JSON:", parsedSummary)
-        } catch (jsonError) {
-          console.log("❌ JSON parsing failed, using direct extraction from API response")
-          
-          // Since your API returns the data directly in the response object, use it directly
-          parsedSummary = {
-            summary: data.summary || "Summary not available",
-            talking_points: data.talking_points || "Talking points not available", 
-            icebreaker: data.icebreaker || "Icebreaker not available"
+        let rawSummary = data.summary || JSON.stringify(data)
+        console.log("🔍 Raw summary string:", rawSummary)
+
+        // Handle the backend format: '{"summary": "...", "talking_points": "...", "icebreaker": "..."}'
+        if (typeof rawSummary === "string") {
+          // Remove outer quotes (single or double)
+          rawSummary = rawSummary.trim()
+          if (
+            (rawSummary.startsWith("'") && rawSummary.endsWith("'")) ||
+            (rawSummary.startsWith('"') && rawSummary.endsWith('"'))
+          ) {
+            rawSummary = rawSummary.slice(1, -1)
           }
-          console.log("✅ Using direct API response fields:", parsedSummary)
+
+          // Clean up escaped characters
+          rawSummary = rawSummary.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\").replace(/\\'/g, "'")
+
+          console.log("🧹 Cleaned summary string:", rawSummary)
+
+          // Try to parse as JSON
+          parsedSummary = JSON.parse(rawSummary)
+          console.log("✅ Successfully parsed JSON:", parsedSummary)
+        } else if (typeof rawSummary === "object") {
+          parsedSummary = rawSummary
+          console.log("✅ Summary was already an object:", parsedSummary)
         }
-      } else if (typeof data === "object" && data.summary) {
-        // If data itself contains the fields we need
+      } catch (jsonError) {
+        console.log("❌ JSON parsing failed, using improved regex extraction:", jsonError)
+
+        // Improved fallback regex that handles the exact backend format
+        const rawText = typeof data.summary === "string" ? data.summary : JSON.stringify(data)
+        console.log("🔍 Raw text for regex extraction:", rawText)
+
+        // Better regex patterns that handle nested quotes and content properly
+        const summaryMatch = rawText.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/i)
+        const talkingPointsMatch = rawText.match(/"talking_points"\s*:\s*"((?:[^"\\]|\\.)*)"/i)
+        const icebreakerMatch = rawText.match(/"icebreaker"\s*:\s*"((?:[^"\\]|\\.)*)"/i)
+
+        console.log("🔍 Regex extraction results:", {
+          summaryFound: !!summaryMatch,
+          talkingPointsFound: !!talkingPointsMatch,
+          icebreakerFound: !!icebreakerMatch,
+        })
+
+        // Clean extracted text
+        const cleanExtractedText = (text: string | null) => {
+          if (!text) return null
+          return text.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\").replace(/\\'/g, "'")
+        }
+
         parsedSummary = {
-          summary: data.summary,
-          talking_points: data.talking_points,
-          icebreaker: data.icebreaker
+          summary: cleanExtractedText(summaryMatch?.[1]) || "Unable to extract summary from AI response",
+          talking_points:
+            cleanExtractedText(talkingPointsMatch?.[1]) || "Unable to extract talking points from AI response",
+          icebreaker: cleanExtractedText(icebreakerMatch?.[1]) || "Unable to extract icebreaker from AI response",
         }
-        console.log("✅ Using direct object properties:", parsedSummary)
-      } else {
-        console.log("❌ Unexpected data format, using fallback")
-        parsedSummary = {
-          summary: "Unable to parse summary from API response",
-          talking_points: "Unable to parse talking points from API response",
-          icebreaker: "Unable to parse icebreaker from API response"
-        }
+
+        console.log("✅ Final regex extracted summary:", parsedSummary)
       }
 
       console.log("🎯 Final parsed summary:", parsedSummary)
+
       setAiSummary(parsedSummary)
 
       // Auto-switch to AI summary tab when generated
@@ -1298,7 +1379,7 @@ export default function ContactFinder() {
     setCompanySuggestions([])
     setShowCompanySuggestions(false)
     setDisableCompanySuggestions(false)
-    setActiveTab("basic")
+    setActiveTab("basic") // FIXED: Reset to basic tab
   }
 
   const authContentElement = authContent()

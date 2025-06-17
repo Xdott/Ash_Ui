@@ -229,13 +229,11 @@ export default function ContactDashboard() {
     setMounted(true)
   }, [])
 
-// NEW: Added second useEffect for immediate loading
-useEffect(() => {
-  if (user?.email && mounted) {
-    // Start loading even before auth is fully complete
-    fetchAllContacts()
-  }
-}, [user?.email, mounted])
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user && mounted) {
+      fetchAllContacts()
+    }
+  }, [authLoading, isAuthenticated, user, mounted])
 
   // Reset to first page when filters change
   useEffect(() => {
