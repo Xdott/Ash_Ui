@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { User, Building, MapPin, Briefcase, Search, Loader2 } from "lucide-react"
 
@@ -31,96 +30,84 @@ export function ContactFinderForm({ onSubmit, loading }: ContactFinderFormProps)
   }
 
   return (
-    <div className="bg-white/80 backdrop-blur shadow-xl rounded-xl border-0">
-      <div className="p-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-3">
-            <div className="flex items-center">
-              <User className="h-5 w-5 text-blue-600 mr-3" />
-              <label htmlFor="employeeName" className="font-semibold text-gray-700">
-                Full Name
-              </label>
-              <span className="ml-2 text-xs text-red-500">*</span>
-            </div>
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+      <div className="p-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <User className="h-4 w-4 text-blue-600 mr-2" />
+              Full Name
+              <span className="text-red-500 ml-1">*</span>
+            </label>
             <input
-              id="employeeName"
               type="text"
               placeholder="Jane Doe"
               value={formData.employeeName}
               onChange={(e) => handleInputChange("employeeName", e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center">
-              <Building className="h-5 w-5 text-blue-600 mr-3" />
-              <label htmlFor="companyName" className="font-semibold text-gray-700">
-                Company
-              </label>
-              <span className="ml-2 text-xs text-red-500">*</span>
-            </div>
+          <div>
+            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <Building className="h-4 w-4 text-blue-600 mr-2" />
+              Company
+              <span className="text-red-500 ml-1">*</span>
+            </label>
             <input
-              id="companyName"
               type="text"
               placeholder="Acme Inc"
               value={formData.companyName}
               onChange={(e) => handleInputChange("companyName", e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center">
-              <MapPin className="h-5 w-5 text-blue-600 mr-3" />
-              <label htmlFor="location" className="font-semibold text-gray-700">
-                Location
-              </label>
-              <span className="ml-2 text-xs text-gray-500">(Optional)</span>
-            </div>
+          <div>
+            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <MapPin className="h-4 w-4 text-blue-600 mr-2" />
+              Location
+              <span className="text-xs text-gray-500 ml-1">(Optional)</span>
+            </label>
             <input
-              id="location"
               type="text"
               placeholder="New York, NY"
               value={formData.location}
               onChange={(e) => handleInputChange("location", e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center">
-              <Briefcase className="h-5 w-5 text-blue-600 mr-3" />
-              <label htmlFor="title" className="font-semibold text-gray-700">
-                Title
-              </label>
-              <span className="ml-2 text-xs text-gray-500">(Optional)</span>
-            </div>
+          <div>
+            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <Briefcase className="h-4 w-4 text-blue-600 mr-2" />
+              Title
+              <span className="text-xs text-gray-500 ml-1">(Optional)</span>
+            </label>
             <input
-              id="title"
               type="text"
               placeholder="Software Engineer"
               value={formData.title}
               onChange={(e) => handleInputChange("title", e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-4 text-lg font-semibold text-white bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 rounded-lg transition-all duration-200 disabled:opacity-50 flex items-center justify-center"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center"
             disabled={loading || !formData.employeeName.trim() || !formData.companyName.trim()}
           >
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Searching...
               </>
             ) : (
               <>
-                <Search className="mr-2 h-5 w-5" />
+                <Search className="mr-2 h-4 w-4" />
                 Find Contact
               </>
             )}

@@ -28,6 +28,8 @@ import {
   Target,
   Users,
   FileUp,
+  Gift,
+  Sparkles,
 } from "lucide-react"
 import { LogoutButton } from "./logout"
 
@@ -41,6 +43,21 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 const CACHE_KEY = "dashboard_data"
 
+// Free credits configuration for new users - Updated to match backend
+const FREE_CREDITS_CONFIG = {
+  total: 3625, // Updated total: 500*6 + 50 + 75
+  distribution: {
+    contact_upload: 500,
+    email_validation: 500,
+    phone_number_validation: 500,
+    linkedin_finder: 500,
+    contact_finder: 500,
+    company_finder: 500,
+    company_people_finder: 50, // Lower amount as these are more expensive
+    enrichment: 75, // Lower amount
+  },
+}
+
 interface CreditStats {
   email_validation: number
   phone_number_validation: number
@@ -49,7 +66,7 @@ interface CreditStats {
   company_finder: number
   company_people_finder: number
   enrichment: number
-  contact_upload: number // NEW: Added contact_upload
+  contact_upload: number
 }
 
 interface TodayUsage {
@@ -60,7 +77,7 @@ interface TodayUsage {
   company_people_finder_today: number
   linkedin_finder_today: number
   enrichment_today: number
-  contact_upload_today: number // NEW: Added contact_upload
+  contact_upload_today: number
   total_searches_today: number
   total_validations_today: number
   total_usage_today: number
@@ -68,7 +85,7 @@ interface TodayUsage {
 
 interface DashboardData {
   credits: CreditStats
-  has_claimed_free: boolean
+  has_claimed_free_starter_credits: boolean // Updated field name to match backend logic
   today_usage: TodayUsage | null
   usage_stats?: {
     total_searches_today: number
@@ -120,7 +137,7 @@ const ToolCard = memo(({ tool }: { tool: any }) => {
       key={tool.name}
       href={tool.href}
       className="group border border-gray-200 rounded-lg p-4 hover:border-gray-300 hover:shadow-sm transition-all duration-200"
-      prefetch={false} // Don't prefetch all tool pages
+      prefetch={false}
     >
       <div className="flex items-start space-x-3">
         <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
@@ -153,6 +170,60 @@ const ActivityItem = memo(({ activity, index }: { activity: any; index: number }
     <div className="flex-1 min-w-0">
       <p className="text-sm text-gray-900">{activity.action}</p>
       <p className="text-xs text-gray-500">{activity.time}</p>
+    </div>
+  </div>
+))
+
+// Welcome Banner for New Users
+const WelcomeBanner = memo(({ onClaim, claiming }: { onClaim: () => void; claiming: boolean }) => (
+  <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 mb-8 text-white">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center space-x-4">
+        <div className="w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+          <Gift className="h-6 w-6 text-white" />
+        </div>
+        <div>
+          <h3 className="text-xl font-semibold mb-1">Welcome to Contact Intelligence! 🎉</h3>
+          <p className="text-blue-100 text-sm">
+            Get started with <strong>FREE STARTER CREDITS</strong> to explore all our tools
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={onClaim}
+        disabled={claiming}
+        className="bg-white text-blue-600 px-6 py-3 rounded-lg font-medium hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center space-x-2"
+      >
+        {claiming ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Claiming...</span>
+          </>
+        ) : (
+          <>
+            <Sparkles className="h-4 w-4" />
+            <span>Claim Free Credits</span>
+          </>
+        )}
+      </button>
+    </div>
+    <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+      <div className="bg-white bg-opacity-10 rounded-lg p-3 text-center">
+        <div className="font-semibold">500</div>
+        <div className="text-blue-100">Contact Finder</div>
+      </div>
+      <div className="bg-white bg-opacity-10 rounded-lg p-3 text-center">
+        <div className="font-semibold">500</div>
+        <div className="text-blue-100">Email Validation</div>
+      </div>
+      <div className="bg-white bg-opacity-10 rounded-lg p-3 text-center">
+        <div className="font-semibold">500</div>
+        <div className="text-blue-100">LinkedIn Finder</div>
+      </div>
+      <div className="bg-white bg-opacity-10 rounded-lg p-3 text-center">
+        <div className="font-semibold">1,625</div>
+        <div className="text-blue-100">More Tools</div>
+      </div>
     </div>
   </div>
 ))
@@ -195,6 +266,7 @@ function HomePageContent() {
   const [showCreditPurchase, setShowCreditPurchase] = useState(false)
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loadingData, setLoadingData] = useState(true)
+  const [claimingFreeCredits, setClaimingFreeCredits] = useState(false)
   const { user, isAuthenticated, isLoading, loginWithRedirect } = useAuth0()
   const searchParams = useSearchParams()
 
@@ -229,6 +301,59 @@ function HomePageContent() {
     ]
     return toolsWithCredits.filter((credit) => (credit || 0) > 0).length
   }, [dashboardData?.credits])
+
+  // Function to claim free credits for new users
+  const claimFreeCredits = useCallback(async () => {
+    if (!user?.email || claimingFreeCredits) return
+
+    setClaimingFreeCredits(true)
+
+    try {
+      const response = await fetch(`${API_URL}/claim-free-credits`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: user.email,
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+
+        // Show success message
+        setSuccessData({
+          credits: result.total_credits?.toString() || FREE_CREDITS_CONFIG.total.toString(),
+          email: user.email,
+          packageName: "Welcome Package - Free Starter Credits",
+          price: "0",
+        })
+        setShowSuccessMessage(true)
+
+        // Refresh dashboard data
+        setTimeout(() => {
+          fetchDashboardData(false) // Force fresh data
+        }, 1000)
+
+        // Clear cache to ensure fresh data
+        localStorage.removeItem(`${CACHE_KEY}_${user.email}`)
+      } else {
+        const error = await response.json()
+        console.error("Failed to claim free credits:", error)
+
+        // Show error message if already claimed
+        if (error.error?.includes("already claimed")) {
+          // Hide the banner by updating the state
+          setDashboardData((prev) => (prev ? { ...prev, has_claimed_free_starter_credits: true } : null))
+        }
+      }
+    } catch (error) {
+      console.error("Error claiming free credits:", error)
+    } finally {
+      setClaimingFreeCredits(false)
+    }
+  }, [user?.email, claimingFreeCredits])
 
   // Memoized tools array
   const tools = useMemo(
@@ -406,7 +531,8 @@ function HomePageContent() {
               enrichment: data.available_credits?.enrichment || 0,
               contact_upload: data.available_credits?.contact_upload || 0,
             },
-            has_claimed_free: Object.values(data.total_credits || {}).some((credit) => credit > 0),
+            // Check if tenant has claimed "Free Starter Credits" - this is the key logic
+            has_claimed_free_starter_credits: data.has_claimed_free_starter_credits || false,
             today_usage: data.usage_today || null,
             usage_stats: {
               total_searches_today: data.usage_today?.total_searches_today || 0,
@@ -561,6 +687,8 @@ function HomePageContent() {
   }
 
   const recentActivity = dashboardData?.recent_activity || []
+  // Show welcome banner only if tenant hasn't claimed "Free Starter Credits"
+  const showWelcomeBanner = !dashboardData?.has_claimed_free_starter_credits && !loadingData
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -580,7 +708,7 @@ function HomePageContent() {
             </div>
 
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {successData.price === "0" ? "Credits Claimed!" : "Payment Successful!"}
+              {successData.price === "0" ? "Free Credits Claimed!" : "Payment Successful!"}
             </h3>
 
             <div className="bg-green-50 rounded-lg p-4 mb-6">
@@ -632,6 +760,9 @@ function HomePageContent() {
             <LogoutButton />
           </div>
         </div>
+
+        {/* Welcome Banner for New Tenants */}
+        {showWelcomeBanner && <WelcomeBanner onClaim={claimFreeCredits} claiming={claimingFreeCredits} />}
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
