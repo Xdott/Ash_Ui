@@ -311,8 +311,8 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
-        <DialogHeader className="pb-4">
+      <DialogContent className="max-w-7xl h-[95vh] flex flex-col">
+        <DialogHeader className="pb-4 flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Target className="h-5 w-5 text-blue-600" />
             ULTRA FAST Field Mapping
@@ -329,7 +329,7 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
 
         {/* Credit Information */}
         {uploadData?.credit_info && (
-          <Alert className="mb-4 border-blue-200 bg-blue-50">
+          <Alert className="mb-4 border-blue-200 bg-blue-50 flex-shrink-0">
             <Info className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
               <div className="flex items-center justify-between">
@@ -347,7 +347,7 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
 
         {/* Sheet Information */}
         {uploadData?.sheet_info?.total_sheets > 1 && (
-          <Alert className="mb-4">
+          <Alert className="mb-4 flex-shrink-0">
             <FileText className="h-4 w-4" />
             <AlertDescription>
               This Excel file contains {uploadData.sheet_info.total_sheets} sheets. Currently processing:{" "}
@@ -360,14 +360,14 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
 
         {/* Error Alert */}
         {error && (
-          <Alert className="border-red-200 bg-red-50 mb-4">
+          <Alert className="border-red-200 bg-red-50 mb-4 flex-shrink-0">
             <AlertCircle className="h-4 w-4 text-red-600" />
             <AlertDescription className="text-red-800">{error}</AlertDescription>
           </Alert>
         )}
 
         {/* Mapping Summary */}
-        <Card className="mb-4">
+        <Card className="mb-4 flex-shrink-0">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
@@ -398,7 +398,9 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
         </Card>
 
         {/* Validation Alert */}
-        <Alert className={hasRequiredFields() ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
+        <Alert
+          className={`mb-4 flex-shrink-0 ${hasRequiredFields() ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
+        >
           {hasRequiredFields() ? (
             <CheckCircle className="h-4 w-4 text-green-600" />
           ) : (
@@ -412,7 +414,7 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
         </Alert>
 
         {/* Action Buttons */}
-        <div className="flex justify-end gap-3 mb-4">
+        <div className="flex justify-end gap-3 mb-4 flex-shrink-0">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
@@ -435,68 +437,64 @@ const ContactFieldMappingModal: React.FC<ContactFieldMappingModalProps> = ({
           </Button>
         </div>
 
-        <Tabs defaultValue="mapping" className="flex-1 overflow-hidden">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="mapping" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="grid w-full grid-cols-2 flex-shrink-0">
             <TabsTrigger value="mapping">Field Mapping ({uploadData.columns.length} columns)</TabsTrigger>
             <TabsTrigger value="preview">Data Preview</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="mapping" className="flex-1 overflow-hidden">
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-3">
-                {uploadData.columns.map((column, index) => {
-                  console.log(`🔍 Rendering column ${index + 1}/${uploadData.columns.length}: ${column}`)
-
-                  return (
-                    <Card key={`${column}-${index}`} className="p-4 border border-gray-200">
-                      <div className="grid grid-cols-12 gap-4 items-center">
-                        {/* Column Name */}
-                        <div className="col-span-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <FileText className="h-4 w-4 text-gray-500" />
-                            <span className="font-medium text-blue-600 text-sm">{column}</span>
-                          </div>
-                          {getConfidenceBadge(column)}
+          <TabsContent value="mapping" className="flex-1 min-h-0 mt-4">
+            <ScrollArea className="h-full w-full">
+              <div className="space-y-3 pr-4 pb-4">
+                {uploadData.columns.map((column, index) => (
+                  <div key={`mapping-${column}-${index}`} className="border rounded-lg p-4 bg-white">
+                    <div className="grid grid-cols-12 gap-4 items-center">
+                      {/* Column Name */}
+                      <div className="col-span-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <FileText className="h-4 w-4 text-gray-500" />
+                          <span className="font-medium text-blue-600 text-sm">{column}</span>
                         </div>
-
-                        {/* Arrow */}
-                        <div className="col-span-1 flex justify-center">
-                          <ArrowRight className="h-4 w-4 text-gray-400" />
-                        </div>
-
-                        {/* Field Select */}
-                        <div className="col-span-6">{renderFieldSelect(column)}</div>
-
-                        {/* Status Indicator */}
-                        <div className="col-span-1 flex justify-center">
-                          {fieldMappings[column] && fieldMappings[column] !== "ignore" ? (
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                          )}
-                        </div>
+                        {getConfidenceBadge(column)}
                       </div>
 
-                      {/* Sample Data */}
-                      {uploadData.preview_data?.[0]?.[column] && (
-                        <div className="mt-3 p-2 bg-gray-50 rounded text-xs border-l-2 border-blue-200">
-                          <span className="text-gray-500 font-medium">Sample: </span>
-                          <span className="font-mono text-gray-700">
-                            {String(uploadData.preview_data[0][column]).substring(0, 50)}
-                            {String(uploadData.preview_data[0][column]).length > 50 ? "..." : ""}
-                          </span>
-                        </div>
-                      )}
-                    </Card>
-                  )
-                })}
+                      {/* Arrow */}
+                      <div className="col-span-1 flex justify-center">
+                        <ArrowRight className="h-4 w-4 text-gray-400" />
+                      </div>
+
+                      {/* Field Select */}
+                      <div className="col-span-7">{renderFieldSelect(column)}</div>
+
+                      {/* Status Indicator */}
+                      <div className="col-span-1 flex justify-center">
+                        {fieldMappings[column] && fieldMappings[column] !== "ignore" ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Sample Data */}
+                    {uploadData.preview_data?.[0]?.[column] && (
+                      <div className="mt-3 p-2 bg-gray-50 rounded text-xs border-l-2 border-blue-200">
+                        <span className="text-gray-500 font-medium">Sample: </span>
+                        <span className="font-mono text-gray-700">
+                          {String(uploadData.preview_data[0][column]).substring(0, 50)}
+                          {String(uploadData.preview_data[0][column]).length > 50 ? "..." : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="preview" className="flex-1">
-            <ScrollArea className="h-[400px]">
-              <div className="space-y-4">
+          <TabsContent value="preview" className="flex-1 min-h-0 mt-4">
+            <ScrollArea className="h-full">
+              <div className="space-y-4 pr-4">
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription>

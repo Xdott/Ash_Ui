@@ -4,28 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useAuth0 } from "@auth0/auth0-react"
-import {
-  CreditCard,
-  Loader2,
-  Check,
-  AlertCircle,
-  Gift,
-  Mail,
-  Phone,
-  LinkedinIcon as LinkedIn,
-  Users,
-  Building2,
-  Upload,
-  Plus,
-  Minus,
-  ShoppingCart,
-  Sparkles,
-  BadgeCheck,
-  Shield,
-  Package,
-  Star,
-  ArrowUp,
-} from "lucide-react"
+import { CreditCard, Loader2, Check, AlertCircle, Mail, Phone, LinkedinIcon as LinkedIn, Users, Building2, Upload, Plus, Minus, ShoppingCart, Sparkles, BadgeCheck, Shield, Package, Star, ArrowUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
@@ -234,7 +213,6 @@ const contactUploadPlans: ContactUploadPlan[] = [
 export default function IndividualCreditPurchase() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(false)
-  const [claimingFree, setClaimingFree] = useState(false)
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [activeTab, setActiveTab] = useState<"plans" | "topups">("plans")
   const [selectedPlan, setSelectedPlan] = useState<ContactUploadPlan | null>(null)
@@ -413,52 +391,6 @@ export default function IndividualCreditPurchase() {
     return cart.reduce((total, item) => total + item.quantity, 0)
   }
 
-  const claimFreeCredits = async () => {
-    if (!isAuthenticated || !user?.email) {
-      toast({
-        title: "Authentication required",
-        description: "Please log in to claim free credits",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setClaimingFree(true)
-
-    try {
-      const response = await fetch(`${API_URL}/claim-free-credits`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          email: user.email,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      toast({
-        title: "Free credits claimed!",
-        description: "100 credits of each type have been added to your account",
-      })
-    } catch (error: any) {
-      toast({
-        title: "Claim failed",
-        description: error.message || "Unable to claim free credits. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setClaimingFree(false)
-    }
-  }
-
   const purchaseCredits = async () => {
     if (!isAuthenticated || !user?.email) {
       toast({
@@ -604,43 +536,6 @@ export default function IndividualCreditPurchase() {
           </button>
         </div>
       </div>
-
-      {/* Free Credits Banner */}
-      <Card className="mb-8 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-md overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 transform translate-x-16 -translate-y-8">
-          <div className="w-full h-full bg-emerald-200 rounded-full opacity-50"></div>
-        </div>
-        <CardContent className="p-6 relative z-10">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center mb-4 md:mb-0">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4 shadow-inner">
-                <Gift className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Get Started Free</h3>
-                <p className="text-sm text-gray-600">Claim 100 credits of each type to try our services</p>
-              </div>
-            </div>
-            <Button
-              onClick={claimFreeCredits}
-              disabled={claimingFree}
-              className="bg-green-600 hover:bg-green-700 text-white shadow-md"
-            >
-              {claimingFree ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Claiming...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Claim Free Credits
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {activeTab === "plans" && (
         <div className="mb-12">
